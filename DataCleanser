@@ -1,0 +1,55 @@
+import sys
+sys.path.append("C:\\Users\\flawrence\\Documents\\Projects\\pythonLibs\\ctd-python-libs")
+import spreadsheets as s
+from pathlib import Path
+from datetime import date
+from prompt_toolkit.shortcuts import checkboxlist_dialog, radiolist_dialog, button_dialog
+import requests
+from bs4 import BeautifulSoup
+
+def getInputFromUser(columns):
+    columnResultsArray = checkboxlist_dialog(
+        title="Column Selector",
+        text="Which columns would you like to replace the text in?",
+        values = [(heading, heading) for heading in columns]).run()
+
+    columns = dict([(key, "") for key in columnResultsArray])
+
+    for column in columnResultsArray:
+        result = radiolist_dialog(
+            title="Replacement Type",
+            text="Replace " + column + " as:",
+            values=[
+                ("name", "Name"),
+                ("test", "Text")
+            ]
+        ).run() 
+        columns[column] = result
+
+
+    saveSettings = button_dialog(
+    title='Settings',
+    text='Do you want to use these settings for all spreadsheets?',
+    buttons=[
+        ('Yes', True),
+        ('No', False)]).run()
+    
+    return (saveSettings, columns)
+    
+
+
+def createNewEntries():
+    pass
+
+
+def newEntryGenerator():
+    pass
+
+
+files = s.getFileList(Path("C:\\Users\\flawrence\\Documents\\Projects\\ctd-data-redact-by-date\\data"))
+
+
+spreadsheetValues = s.getSpreadsheetValues(files[0])
+userInput = getInputFromUser(list(spreadsheetValues.keys()))
+
+print(userInput)
