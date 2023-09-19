@@ -68,6 +68,8 @@ def newEntryGenerator():
             newText = p.text.strip()
             newText = re.sub('\[\d+]', '', newText) + " Ref: Wikipedia - " + title
             return newText
+    
+    return "Perfer et obdura, dolor hic tibi proderit olim - Ovid, The Amores"
 
 
 
