@@ -1,10 +1,9 @@
-import sys, os
+import sys, os, re, requests
 sys.path.append("C:\\Users\\flawrence\\Documents\\Projects\\pythonLibs\\ctd-python-libs")
 import spreadsheets as s
 from pathlib import Path
 from datetime import date
 from prompt_toolkit.shortcuts import checkboxlist_dialog, radiolist_dialog, button_dialog
-import requests
 from bs4 import BeautifulSoup
 
 
@@ -20,8 +19,6 @@ def getSettingsInputFromUser(total):
     
     return saveSettings
     
-
-
 
 def getSpreadsheetInputFromUser(columns, spreadsheetTitle = ''):
     
@@ -43,7 +40,7 @@ def getSpreadsheetInputFromUser(columns, spreadsheetTitle = ''):
             text="Replace " + column + " as:",
             values=[
                 ("name", "Name"),
-                ("test", "Text")
+                ("text", "Text")
             ]
         ).run() 
         columns[column] = result
@@ -57,24 +54,45 @@ def createNewEntries():
 
 
 def newEntryGenerator():
-    pass
+    url = requests.get("https://en.wikipedia.org/wiki/Special:Random")
+    soup = BeautifulSoup(url.content, "html.parser")
+    title = soup.find(class_="firstHeading").text
+
+    randomPage = "https://en.wikipedia.org/wiki/" + title
+    print(randomPage)
+    url2 = requests.get(randomPage)
+    soup2 = BeautifulSoup(url2.content, "html.parser")
+    content = soup.find(id="mw-content-text")
+    for p in content.find_all('p'):
+        if p.text.strip() != "":
+            newText = p.text.strip()
+            newText = re.sub('\[\d+]', '', newText) + " Ref: Wikipedia - " + title
+            return newText
+
 
 
 files = s.getFileList(Path("C:\\Users\\flawrence\\Documents\\Projects\\ctd-data-redact-by-date\\data"))
 
-bulk = getSettingsInputFromUser(len(files))
+#bulk = getSettingsInputFromUser(len(files))
 
+print(newEntryGenerator())
 
-
+'''
+userInputBySheet = {}
 if bulk:
     spreadsheetValues = s.getSpreadsheetValues(files[0])
     userInput = getSpreadsheetInputFromUser(list(spreadsheetValues.keys()))
 else:
-    userInputBySheet = {}
     for index, file in enumerate(files):
         spreadsheetValues = s.getSpreadsheetValues(file)
         spreadsheetName = os.path.splitext(os.path.basename(file))[0] + " (" + str(index + 1) + "/" + str(len(files)) + ")"
         userInputBySheet[spreadsheetName] = getSpreadsheetInputFromUser(list(spreadsheetValues.keys()), spreadsheetName)
 
 
+if len(userInputBySheet) == 0:
+    print(userInput)
+else:
+    print(userInputBySheet)
+
+'''
 
