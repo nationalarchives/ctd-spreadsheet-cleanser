@@ -1,10 +1,11 @@
-import sys, os, re, requests
+import sys, os, re, requests, time
 sys.path.append("C:\\Users\\flawrence\\Documents\\Projects\\pythonLibs\\ctd-python-libs")
 import spreadsheets as s
 from pathlib import Path
 from datetime import date
 from prompt_toolkit.shortcuts import checkboxlist_dialog, radiolist_dialog, button_dialog
 from bs4 import BeautifulSoup
+from faker import Faker
 
 
 def getSettingsInputFromUser(total):
@@ -19,7 +20,6 @@ def getSettingsInputFromUser(total):
     
     return saveSettings
     
-
 def getSpreadsheetInputFromUser(columns, spreadsheetTitle = ''):
     
     if spreadsheetTitle != '':
@@ -32,34 +32,58 @@ def getSpreadsheetInputFromUser(columns, spreadsheetTitle = ''):
         text="Which columns would you like to replace the text in?",
         values = [(heading, heading) for heading in columns]).run()
 
-    columns = dict([(key, "") for key in columnResultsArray])
+    if columnResultsArray:
+        columns = dict([(key, "") for key in columnResultsArray])
 
-    for column in columnResultsArray:
-        result = radiolist_dialog(
-            title="Replacement Type",
-            text="Replace " + column + " as:",
-            values=[
-                ("name", "Name"),
-                ("text", "Text")
-            ]
-        ).run() 
-        columns[column] = result
+        for column in columnResultsArray:
+            result = radiolist_dialog(
+                title="Replacement Type",
+                text="Replace " + column + " as:",
+                values=[
+                    ("name", "Name"),
+                    ("text", "Text")
+                ]
+            ).run() 
+            columns[column] = result
+    else:
+        exit()
     
     return columns
-    
+
+def createNewEntries(filename, sheet, columnsToRedact):
+    replacementColumns = {}
+    for columnName, type in columnsToRedact.items():
+        column = sheet[columnName]
+        while column and column[-1] == '':
+            column = column[:-1]
+
+        #print(columnName + ": " + type)
+        #print("Length of column: " + str(len(column)))
+
+        identifier = filename + "_" + columnName
+
+        if type == "text":
+            replacementColumns[columnName] = newTextColumnGenerator(identifier, len(column))
+        elif type == "name":
+            replacementColumns[columnName] = newNameColumnGenerator(len(column))
+        else:
+            raise ValueError("Column type " + type + " not recognised")
+
+    #print(replacementColumns)    
+    return replacementColumns
 
 
-def createNewEntries():
-    pass
 
-
-def newEntryGenerator():
+def newTextEntry(sleep = False):
+    if sleep:
+        time.sleep(0.5)
     url = requests.get("https://en.wikipedia.org/wiki/Special:Random")
     soup = BeautifulSoup(url.content, "html.parser")
     title = soup.find(class_="firstHeading").text
 
+
     randomPage = "https://en.wikipedia.org/wiki/" + title
-    print(randomPage)
+    #print(randomPage)
     url2 = requests.get(randomPage)
     soup2 = BeautifulSoup(url2.content, "html.parser")
     content = soup.find(id="mw-content-text")
@@ -71,15 +95,31 @@ def newEntryGenerator():
     
     return "Perfer et obdura, dolor hic tibi proderit olim - Ovid, The Amores"
 
+def newNameColumnGenerator(count = 1):
+    fake = Faker()
+    return [fake.last_name() + " [Replacement]" for i in range(count)]
+
+def newTextColumnGenerator(identifier = '', count = 1):
+    #print("Length of column: " + str(count))
+
+    if count > 1:
+        return [identifier + str(i + 1) + ": " + newTextEntry(True) + " [Replacement]" for i in range(count)]
+    else:
+        return [newTextEntry() for i in range(count)]    
+
+def outputNewSheet(file, replacements):
+        sheet = s.getSpreadsheetValues(file)
+        newValues = createNewEntries(os.path.splitext(os.path.basename(file))[0], sheet, replacements)
+
+        print("Processing File " + str(index + 1))
+        s.createSpreadsheetWithValues(Path("C:\\Users\\flawrence\\Documents\\Projects\\ctd-spreadsheet-cleanser\\ctd-spreadsheet-cleanser\\data"), file, "cleaned", sheet, newValues)
+
 
 
 files = s.getFileList(Path("C:\\Users\\flawrence\\Documents\\Projects\\ctd-data-redact-by-date\\data"))
 
-#bulk = getSettingsInputFromUser(len(files))
+bulk = getSettingsInputFromUser(len(files))
 
-print(newEntryGenerator())
-
-'''
 userInputBySheet = {}
 if bulk:
     spreadsheetValues = s.getSpreadsheetValues(files[0])
@@ -88,13 +128,19 @@ else:
     for index, file in enumerate(files):
         spreadsheetValues = s.getSpreadsheetValues(file)
         spreadsheetName = os.path.splitext(os.path.basename(file))[0] + " (" + str(index + 1) + "/" + str(len(files)) + ")"
-        userInputBySheet[spreadsheetName] = getSpreadsheetInputFromUser(list(spreadsheetValues.keys()), spreadsheetName)
+        userInputBySheet[os.path.splitext(os.path.basename(file))[0]] = getSpreadsheetInputFromUser(list(spreadsheetValues.keys()), spreadsheetName)
+
 
 
 if len(userInputBySheet) == 0:
-    print(userInput)
+    for index, file in enumerate(files):
+        outputNewSheet(file, userInput)
 else:
-    print(userInputBySheet)
+    for index, file in enumerate(files):
+        replacement = userInputBySheet[os.path.splitext(os.path.basename(file))[0]]
+        outputNewSheet(file, replacement)
+    
 
-'''
+
+
 
