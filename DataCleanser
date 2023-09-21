@@ -1,4 +1,4 @@
-import sys, os, re, requests, time
+import sys, os, re, requests, time, random
 sys.path.append("C:\\Users\\flawrence\\Documents\\Projects\\pythonLibs\\ctd-python-libs")
 import spreadsheets as s
 from pathlib import Path
@@ -40,8 +40,15 @@ def getSpreadsheetInputFromUser(columns, spreadsheetTitle = ''):
                 title="Replacement Type",
                 text="Replace " + column + " as:",
                 values=[
-                    ("name", "Name"),
-                    ("text", "Text")
+                    ("surname", "Surname"),
+                    ("first", "First names"),
+                    ("initials", "Initials"),
+                    ("mixed", "Mix of first names and initials"),
+                    ("fullname", "Fullname"),
+                    ("quicktext", "Text (quick)"),
+                    ("wikitext", "Text (wikipedia)"),
+                    ("job", "Occupation"),
+                    ("addy", "Address")
                 ]
             ).run() 
             columns[column] = result
@@ -57,24 +64,38 @@ def createNewEntries(filename, sheet, columnsToRedact):
         while column and column[-1] == '':
             column = column[:-1]
 
-        #print(columnName + ": " + type)
+        print(columnName + ": " + type)
         #print("Length of column: " + str(len(column)))
 
         identifier = filename + "_" + columnName
 
-        if type == "text":
+        if type == "surname":
+            replacementColumns[columnName] = newNameColumnGenerator(len(column), "surname")
+        elif type == "first":
+            replacementColumns[columnName] = newNameColumnGenerator(len(column), "first")
+        elif type == "initials":
+            replacementColumns[columnName] = newNameColumnGenerator(len(column), "initials")
+        elif type == "mixed":
+            replacementColumns[columnName] = newNameColumnGenerator(len(column), "mixed")
+        elif type == "fullname":
+            replacementColumns[columnName] = newNameColumnGenerator(len(column), "full")
+        elif type == "quicktext":
             replacementColumns[columnName] = newTextColumnGenerator(identifier, len(column))
-        elif type == "name":
-            replacementColumns[columnName] = newNameColumnGenerator(len(column))
+        elif type == "wikitext":
+            replacementColumns[columnName] = newTextColumnGenerator(identifier, len(column), True)
+        elif type == "addy":
+            replacementColumns[columnName] = newAddressColumnGenerator(len(column))
+        elif type == "job":
+            replacementColumns[columnName] = newJobColumnGenerator(len(column))
         else:
             raise ValueError("Column type " + type + " not recognised")
 
-    #print(replacementColumns)    
+    print(replacementColumns)    
     return replacementColumns
 
 
 
-def newTextEntry(sleep = False):
+def newWikiTextEntry(sleep = False):
     if sleep:
         time.sleep(0.5)
     url = requests.get("https://en.wikipedia.org/wiki/Special:Random")
@@ -95,17 +116,50 @@ def newTextEntry(sleep = False):
     
     return "Perfer et obdura, dolor hic tibi proderit olim - Ovid, The Amores"
 
-def newNameColumnGenerator(count = 1):
+def newQuickTextEntry(count = 1):
     fake = Faker()
-    return [fake.last_name() + " [Replacement]" for i in range(count)]
+    return [fake.paragraph() + " [Replacement]" for i in range(count)]
 
-def newTextColumnGenerator(identifier = '', count = 1):
-    #print("Length of column: " + str(count))
+def nameAndInitialsEntry(fake, type):
+    numOfNames = random.choices([1, 2, 3], weights=(60, 30, 10))
+    name = ""
+    for i in range(numOfNames[0]):
+        toInitial = random.randrange(2)
 
-    if count > 1:
-        return [identifier + str(i + 1) + ": " + newTextEntry(True) + " [Replacement]" for i in range(count)]
+        if (toInitial == 1 and type != "initials") or type == "first":
+            name += fake.first_name()
+        else:
+            name += (fake.first_name()[1]).upper()
+        name += " "   
+    return name.strip() 
+
+def newNameColumnGenerator(count = 1, type = 'full'):
+    fake = Faker()
+    if type == 'full':
+        return [fake.name() + " [Replacement]" for i in range(count)]
+    elif type == 'surname':
+        return [fake.last_name() + " [Replacement]" for i in range(count)]
+    elif type == "first" or type == "initials" or type == "mixed":
+        return [nameAndInitialsEntry(fake, type) + " [Replacement]" for i in range(count)]
     else:
-        return [newTextEntry() for i in range(count)]    
+        raise ValueError("Name type " + type + " not recognised")
+
+def newAddressColumnGenerator(count = 1):
+    fake = Faker('en_GB')
+    return [(fake.address()).replace("\n", ", ") + " [Replacement]" for i in range(count)]
+
+def newJobColumnGenerator(count = 1):
+    fake = Faker()
+    return [fake.job() + " [Replacement]" for i in range(count)]
+
+def newTextColumnGenerator(identifier = '', count = 1, wiki = False):
+    #print("Length of column: " + str(count))
+    if wiki and count > 1:
+        return [identifier + str(i + 1) + ": " + newWikiTextEntry(True) + " [Replacement]" for i in range(count)]
+    elif wiki:
+        return [newWikiTextEntry() for i in range(count)]    
+    else:
+        return [identifier + str(i + 1) + ": " + textEntry for i, textEntry in enumerate(newQuickTextEntry(count))]
 
 def outputNewSheet(file, replacements):
         sheet = s.getSpreadsheetValues(file)
@@ -115,6 +169,27 @@ def outputNewSheet(file, replacements):
         s.createSpreadsheetWithValues(Path("C:\\Users\\flawrence\\Documents\\Projects\\ctd-spreadsheet-cleanser\\ctd-spreadsheet-cleanser\\data"), file, "cleaned", sheet, newValues)
 
 
+'''
+print("Surname:")
+print(newNameColumnGenerator(2, "surname"))
+print("First name:")
+print(newNameColumnGenerator(2, "first"))
+print("Initials:")
+print(newNameColumnGenerator(2, "initials"))
+print("Mixed:")
+print(newNameColumnGenerator(2, "mixed"))
+print("Full name:")
+print(newNameColumnGenerator(2, "full"))
+print("Text (Quick):")
+print(newTextColumnGenerator("Test", 2))
+print("Text (Wiki):")
+print(newTextColumnGenerator("Test", 1, True))
+print("Address:")
+print(newAddressColumnGenerator(2))
+print("Occupation:")
+print(newJobColumnGenerator(2))
+
+'''
 
 files = s.getFileList(Path("C:\\Users\\flawrence\\Documents\\Projects\\ctd-data-redact-by-date\\data"))
 
