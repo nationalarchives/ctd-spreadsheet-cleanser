@@ -3,7 +3,7 @@ sys.path.append("C:\\Users\\flawrence\\Documents\\Projects\\pythonLibs\\ctd-pyth
 import spreadsheets as s
 from pathlib import Path
 from datetime import date
-from prompt_toolkit.shortcuts import checkboxlist_dialog, radiolist_dialog, button_dialog
+from prompt_toolkit.shortcuts import checkboxlist_dialog, radiolist_dialog, button_dialog, input_dialog
 from bs4 import BeautifulSoup
 from faker import Faker
 
@@ -21,7 +21,8 @@ def getSettingsInputFromUser(total):
     return saveSettings
     
 def getSpreadsheetInputFromUser(columns, spreadsheetTitle = ''):
-    
+    patterns = {}
+
     if spreadsheetTitle != '':
         dialogTitle = "Column Selector: " + spreadsheetTitle
     else:
@@ -55,42 +56,81 @@ def getSpreadsheetInputFromUser(columns, spreadsheetTitle = ''):
     else:
         exit()
     
-    return columns
+    if "quicktext" in columns.values() or "wikitext" in columns.values():
+        for columnName, type in columns.items():
+            if "text" in type:
+                patterns[columnName] = getPattern(columnName)
 
-def createNewEntries(filename, sheet, columnsToRedact):
+    return (columns, patterns)
+
+def getPattern(columnName, retry = False):
+    #print("Getting pattern")
+
+    if retry:
+        titleText = 'Regex pattern for "' + columnName + '" not valid. Re-enter pattern or leave blank'
+    else:
+        titleText = 'Include pattern in text for "' + columnName + '"'
+
+
+    pattern = input_dialog(
+        title=titleText,
+        text='Enter regex pattern of text to include from original text or leave blank:').run()
+
+    if pattern != '': 
+        try:            
+            return re.compile(pattern)                         
+        except re.error:
+            return(getPattern(columnName, True))
+    else:
+        return pattern 
+
+def includeFromOriginalEntry(pattern, originalText, newText):
+    return([newRow[:-len("[Replacement]")] + " ".join(pattern.findall(oldRow)) + " [Replacement]" if re.search(pattern, oldRow) else newRow for oldRow, newRow in zip(originalText, newText)])
+
+
+def createNewEntries(filename, sheet, columnsToRedact, patterns):
     replacementColumns = {}
-    for columnName, type in columnsToRedact.items():
-        column = sheet[columnName]
-        while column and column[-1] == '':
-            column = column[:-1]
 
-        print(columnName + ": " + type)
+    #print(patterns)
+
+    for columnName, type in columnsToRedact.items():
+        originalColumn = sheet[columnName]
+        while originalColumn and originalColumn[-1] == '':
+            originalColumn = originalColumn[:-1]
+
+        #print(columnName + ": " + type)
         #print("Length of column: " + str(len(column)))
 
         identifier = filename + "_" + columnName
 
         if type == "surname":
-            replacementColumns[columnName] = newNameColumnGenerator(len(column), "surname")
+            replacementColumns[columnName] = newNameColumnGenerator(len(originalColumn), "surname")
         elif type == "first":
-            replacementColumns[columnName] = newNameColumnGenerator(len(column), "first")
+            replacementColumns[columnName] = newNameColumnGenerator(len(originalColumn), "first")
         elif type == "initials":
-            replacementColumns[columnName] = newNameColumnGenerator(len(column), "initials")
+            replacementColumns[columnName] = newNameColumnGenerator(len(originalColumn), "initials")
         elif type == "mixed":
-            replacementColumns[columnName] = newNameColumnGenerator(len(column), "mixed")
+            replacementColumns[columnName] = newNameColumnGenerator(len(originalColumn), "mixed")
         elif type == "fullname":
-            replacementColumns[columnName] = newNameColumnGenerator(len(column), "full")
+            replacementColumns[columnName] = newNameColumnGenerator(len(originalColumn), "full")
         elif type == "quicktext":
-            replacementColumns[columnName] = newTextColumnGenerator(identifier, len(column))
+            replacementColumns[columnName] = newTextColumnGenerator(identifier, len(originalColumn))
         elif type == "wikitext":
-            replacementColumns[columnName] = newTextColumnGenerator(identifier, len(column), True)
+            replacementColumns[columnName] = newTextColumnGenerator(identifier, len(originalColumn), True)
         elif type == "addy":
-            replacementColumns[columnName] = newAddressColumnGenerator(len(column))
+            replacementColumns[columnName] = newAddressColumnGenerator(len(originalColumn))
         elif type == "job":
-            replacementColumns[columnName] = newJobColumnGenerator(len(column))
+            replacementColumns[columnName] = newJobColumnGenerator(len(originalColumn))
         else:
             raise ValueError("Column type " + type + " not recognised")
+        
+        if "text" in type and columnName in patterns.keys():
+            pattern = patterns[columnName]
+            if pattern != '':
+                replacementColumns[columnName] = includeFromOriginalEntry(pattern, originalColumn, replacementColumns[columnName])
 
-    print(replacementColumns)    
+            #print(replacementColumns[columnName])    
+
     return replacementColumns
 
 
@@ -155,16 +195,17 @@ def newJobColumnGenerator(count = 1):
 def newTextColumnGenerator(identifier = '', count = 1, wiki = False):
     #print("Length of column: " + str(count))
     if wiki and count > 1:
-        return [identifier + str(i + 1) + ": " + newWikiTextEntry(True) + " [Replacement]" for i in range(count)]
+        return [identifier + "_" + str(i + 1) + ": " + newWikiTextEntry(True) + " [Replacement]" for i in range(count)]
     elif wiki:
         return [newWikiTextEntry() for i in range(count)]    
     else:
-        return [identifier + str(i + 1) + ": " + textEntry for i, textEntry in enumerate(newQuickTextEntry(count))]
+        return [identifier + "_" + str(i + 1) + ": " + textEntry for i, textEntry in enumerate(newQuickTextEntry(count))]
 
-def outputNewSheet(file, replacements):
+def outputNewSheet(file, replacements, patterns):
         sheet = s.getSpreadsheetValues(file)
-        newValues = createNewEntries(os.path.splitext(os.path.basename(file))[0], sheet, replacements)
+        newValues = createNewEntries(os.path.splitext(os.path.basename(file))[0], sheet, replacements, patterns)
 
+        #print(newValues)
         print("Processing File " + str(index + 1))
         s.createSpreadsheetWithValues(Path("C:\\Users\\flawrence\\Documents\\Projects\\ctd-spreadsheet-cleanser\\ctd-spreadsheet-cleanser\\data"), file, "cleaned", sheet, newValues)
 
@@ -193,12 +234,15 @@ print(newJobColumnGenerator(2))
 
 files = s.getFileList(Path("C:\\Users\\flawrence\\Documents\\Projects\\ctd-data-redact-by-date\\data"))
 
-bulk = getSettingsInputFromUser(len(files))
+if len(files) > 1:
+    bulk = getSettingsInputFromUser(len(files))
+else:
+    bulk = True
 
 userInputBySheet = {}
 if bulk:
     spreadsheetValues = s.getSpreadsheetValues(files[0])
-    userInput = getSpreadsheetInputFromUser(list(spreadsheetValues.keys()))
+    userInput, patterns = getSpreadsheetInputFromUser(list(spreadsheetValues.keys()))
 else:
     for index, file in enumerate(files):
         spreadsheetValues = s.getSpreadsheetValues(file)
@@ -209,13 +253,13 @@ else:
 
 if len(userInputBySheet) == 0:
     for index, file in enumerate(files):
-        outputNewSheet(file, userInput)
+        outputNewSheet(file, userInput, patterns)
 else:
     for index, file in enumerate(files):
-        replacement = userInputBySheet[os.path.splitext(os.path.basename(file))[0]]
-        outputNewSheet(file, replacement)
+        replacement, patterns = userInputBySheet[os.path.splitext(os.path.basename(file))[0]]
+        outputNewSheet(file, replacement, patterns)
     
-
+''' '''
 
 
 
