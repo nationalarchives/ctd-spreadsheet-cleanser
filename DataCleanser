@@ -41,11 +41,11 @@ def getSpreadsheetInputFromUser(columns, spreadsheetTitle = ''):
                 title="Replacement Type",
                 text="Replace " + column + " as:",
                 values=[
-                    ("surname", "Surname"),
+                    ("fullname", "Fullname"),
                     ("first", "First names"),
                     ("initials", "Initials"),
                     ("mixed", "Mix of first names and initials"),
-                    ("fullname", "Fullname"),
+                    ("surname", "Surname"),
                     ("quicktext", "Text (quick)"),
                     ("wikitext", "Text (wikipedia)"),
                     ("job", "Occupation"),
@@ -86,7 +86,6 @@ def getPattern(columnName, retry = False):
 
 def includeFromOriginalEntry(pattern, originalText, newText):
     return([newRow[:-len("[Replacement]")] + " ".join(pattern.findall(oldRow)) + " [Replacement]" if re.search(pattern, oldRow) else newRow for oldRow, newRow in zip(originalText, newText)])
-
 
 def createNewEntries(filename, sheet, columnsToRedact, patterns):
     replacementColumns = {}
@@ -132,8 +131,6 @@ def createNewEntries(filename, sheet, columnsToRedact, patterns):
             #print(replacementColumns[columnName])    
 
     return replacementColumns
-
-
 
 def newWikiTextEntry(sleep = False):
     if sleep:
