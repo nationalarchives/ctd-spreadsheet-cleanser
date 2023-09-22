@@ -204,7 +204,7 @@ def outputNewSheet(file, replacements, patterns):
 
         #print(newValues)
         print("Processing File " + str(index + 1))
-        s.createSpreadsheetWithValues(Path("C:\\Users\\flawrence\\Documents\\Projects\\ctd-spreadsheet-cleanser\\ctd-spreadsheet-cleanser\\data"), file, "cleaned", sheet, newValues)
+        s.createSpreadsheetWithValues(Path("C:\\Users\\flawrence\\Documents\\Projects\\ctd-spreadsheet-cleanser\\data"), file, "cleaned", sheet, newValues)
 
 
 '''
