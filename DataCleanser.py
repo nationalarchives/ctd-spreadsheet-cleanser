@@ -42,14 +42,17 @@ def getSettingsInputFromUser(total):
     
     return saveIdSettings
 
-def getIdentifierInputFromUser(count, retry = False, retryMessg = ''):
+def getIdentifierInputFromUser(columnName, count, retry = False, retryMessg = ''):
     
     dialogueText = "How many digits? (use numbers only)"
+    titleText1 = columnName + ": Identifier Length (1/2)"
+    titleText2 = columnName + ": Identifier Uniqueness (2/2)"
+
     if retryMessg != '':
         dialogueText += " - " + retryMessg
     
     length = input_dialog(
-    title='Identifier Format 1/2',
+    title=titleText1,
     text=dialogueText,
     ).run()
 
@@ -60,7 +63,7 @@ def getIdentifierInputFromUser(count, retry = False, retryMessg = ''):
 
     if length and length.isdigit(): 
         uniqueId = button_dialog(
-        title='Identifiers 2/2',
+        title=titleText2,
         text="Should the identifiers be unique or repeated?",
         buttons=[
             ('Unique', True),
@@ -114,8 +117,6 @@ def getSpreadsheetInputFromUser(columns, spreadsheetTitle = ''):
             if "text" in type:
                 patterns[columnName] = getPattern(columnName)
 
-    if "number" in columns.values():
-        pass
 
     return (columns, patterns)
 
@@ -190,7 +191,7 @@ def createNewEntries(filename, sheet, columnsToRedact, patterns):
         elif type == "job":
             replacementColumns[columnName] = newJobColumnGenerator(len(originalColumn))
         elif type == "id_num":
-            replacementColumns[columnName] = newIdentifierColumnGenerator(len(originalColumn), "numerical")
+            replacementColumns[columnName] = newIdentifierColumnGenerator(columnName, len(originalColumn), "numerical")
         elif type != "fullname":
             raise ValueError("Column type " + type + " not recognised")
 
@@ -286,23 +287,23 @@ def newTextColumnGenerator(count = 1, identifier = '', wiki = False):
     else:
         return [identifier + "_" + str(i + 1) + ": " + textEntry for i, textEntry in enumerate(newQuickTextEntry(count))]
 
-def newIdentifierColumnGenerator(count = 1, type = "numerical"):
+def newIdentifierColumnGenerator(columnName, count = 1, type = "numerical"):
     # Need to check if numerical, letters, mix and how long
 
-    length, unique = getIdentifierInputFromUser(count)
+    length, unique = getIdentifierInputFromUser(columnName, count)
     if length != None and unique != None:
 
-        #Will not create an id with a leading 0 to avoid it getting dropped
-        id_string = ''.join([str(random.randint(1,9)) for i in range(length)])
-        newIdentifier = int(id_string)
+
 
         if type == "numerical":
+            id_string = str(random.randint(1,9)) + ''.join([str(random.randint(0,9)) for i in range(length - 1)])
+            newIdentifier = int(id_string)
 
             if unique:
                 identifier_set = set()
-                while len(identifier_set) <= count:
+                while len(identifier_set) < count:
                     identifier_set.add(newIdentifier)
-                    newIdentifier = int(''.join([str(random.randint(0,9)) for i in range(length)]))
+                    newIdentifier = int(str(random.randint(1,9)) + ''.join([str(random.randint(0,9)) for i in range(length - 1)]))
 
                 identifiers = list(identifier_set)
             else:
