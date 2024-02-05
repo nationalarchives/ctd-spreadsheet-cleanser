@@ -1,8 +1,7 @@
-import sys, os, re, requests, time, random
-sys.path.append("C:\\Users\\flawrence\\Documents\\Projects\\pythonLibs\\ctd-python-libs")
-import spreadsheets as s
+import os, re, requests, time, random
+from lib import spreadsheets as s
 from pathlib import Path
-from datetime import date
+#from datetime import date
 from prompt_toolkit.shortcuts import checkboxlist_dialog, radiolist_dialog, button_dialog, input_dialog
 from bs4 import BeautifulSoup
 from faker import Faker
@@ -354,12 +353,6 @@ files = s.getFileList(Path("C:\\Users\\flawrence\\Documents\\Projects\\ctd-sprea
 
 newIdentifiers = newIdentifierColumnGenerator(5, "numerical")
 print(newIdentifiers)'''
-
-
-
- 
-#files = s.getFileList(Path("C:\\Users\\flawrence\\Documents\\Projects\\ctd-data-redact-by-date\\data"))
-#files = s.getFileList(Path("C:\\Users\\flawrence\\Documents\\Projects\\ctd-spreadsheet-cleanser\\data\\test"))
 
 
 ''' '''
