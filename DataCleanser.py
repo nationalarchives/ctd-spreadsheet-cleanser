@@ -48,9 +48,9 @@ def getSettingsInputFromUser(total):
     ''' Query user as to whether they want to apply the settings to all spreadsheets or to deal with the different spreadsheets differently
     
         Keyword arguments:
-        total -- the total number of spreadsheets in the folder to be processed (Required)
+        total -- the total number of spreadsheets in the folder to be processed (int, required)
 
-        Returns boolean - True = process all the spreadsheets the same, Talse = process the spreadsheets separately
+        Returns boolean - True = process all the spreadsheets the same, False = process the spreadsheets separately
     '''
 
     settingsText = "Do you want to use the following settings for all " + str(total) + " spreadsheets?"
@@ -70,8 +70,8 @@ def getIdentifierInputFromUser(columnName, retryMessg = ''):
 
         Keyword arguments:
         columnName -- the name of the column which contains an identifier to be replaced. This is included to 
-                        differentiate as there might be multiple columns. (Required)
-        retryMessg -- an additional message which is set when the recursion is called
+                        differentiate as there might be multiple columns. (string, required)
+        retryMessg -- an additional message which is set when the recursion is called (string, optional)
 
         Returns tuple: length of identifier (integer), uniqueness of identifier (boolean)
     '''
@@ -112,8 +112,10 @@ def getSpreadsheetInputFromUser(columns, spreadsheetTitle = ''):
         If 'text' is chosen then call the function to get the pattern is one needs to be included
 
         Keyword arguments:
-        columns -- list of column names (required)
-        spreadsheetTitle -- name of spreadsheet (optional)
+        columns -- list of column names (list, required)
+        spreadsheetTitle -- filename of spreadsheet (string, optional)
+
+        Returns tuple: dictionary of type of replacement by columnName, dictionary of patterns by columnName (if any), dictionary of identifier formats by columnName (if any)
     '''
     patterns = {}
     idFormats = {}
@@ -169,8 +171,10 @@ def getPattern(columnName, retry = False):
         Function is recursive if a pattern is entered which is not valid.
 
         Keyword arguments:
-        columnName -- the name of the column being replaced
-        retry -- whether the function is being retried
+        columnName -- the name of the column being replaced (string, required)
+        retry -- whether the function is being retried (boolean, optional)
+
+        Returns string: regex pattern
     '''
     #print("Getting pattern")
 
@@ -196,9 +200,11 @@ def includeFromOriginalEntry(pattern, originalText, newText):
     ''' Get any text matching the given pattern from the original text and add it to the replacement text
 
         Keyword arguments:
-        pattern -- a regex pattern
-        originalText -- original text which is being replaced
-        newText -- new text which is replacing the original text
+        pattern -- a regex pattern (string, required)
+        originalText -- the original text which is being replaced (string, required)
+        newText -- string with the new text which is replacing the original text (string, required)
+
+        Returns string: replacement text with anything matching the pattern from the original text added 
     '''
     return([newRow[:-len("[Replacement]")] + " ".join(pattern.findall(oldRow)) + " [Replacement]" if re.search(pattern, oldRow) else newRow for oldRow, newRow in zip(originalText, newText)])
 
@@ -207,11 +213,13 @@ def createNewEntries(filename, sheet, columnsToRedact, patterns, identifierForma
     ''' Generate the entries for the new spreadsheet
 
         Keyword arguments:
-        filename -- name of the original spreadsheet (required)
-        sheet -- values in the original spreadsheet (required)
-        columnsToRedact -- list of columns to be redacted (required)
-        patterns -- list of patterns for given columns (required)
-        identifierFormat -- tuple with values for length and uniqueness for given spreadsheet (required)
+        filename -- name of the original spreadsheet (string, required)
+        sheet -- values in the original spreadsheet (dictionary, required)
+        columnsToRedact -- list of columns to be redacted by column name (dictionary, required)
+        patterns -- list of patterns for given columns by column name (dictionary, required)
+        identifierFormat -- tuple with values for length and uniqueness for given spreadsheet (tuple, required)
+
+        Returns dictionary: values for the new spreadsheet by columnNames
     '''
     replacementColumns = {}
 
@@ -290,6 +298,14 @@ def createNewEntries(filename, sheet, columnsToRedact, patterns, identifierForma
     return replacementColumns
 
 def newWikiTextEntry(sleep = False):
+    ''' Retrieve the first paragraph of a random wikipedia page
+
+        Keyword arguments:
+        sleep - sleep between request calls (boolean, optional)
+
+        Returns string: random text paragraph drawn from wikipedia or quote from Ovid if not able to get wikipedia paragraph
+    '''
+
     if sleep:
         time.sleep(0.5)
     url = requests.get("https://en.wikipedia.org/wiki/Special:Random")
@@ -311,10 +327,26 @@ def newWikiTextEntry(sleep = False):
     return "Perfer et obdura, dolor hic tibi proderit olim - Ovid, The Amores"
 
 def newQuickTextEntry(count = 1):
+    ''' Generate a list of fake paragraphs
+
+        Keyword arguments:
+        count: number of fake paragraphs to generate (int, optional)
+
+        Returns list: fake text paragraphs
+    '''
     fake = Faker()
     return [fake.paragraph() + " [Replacement]" for i in range(count)]
 
+
 def nameAndInitialsEntry(fake, type):
+    ''' Generate fake first name(s) and/or initial(s) with between one and three parts
+
+        Keyword arguments:
+        fake -- Faker seed (Faker object, required)
+        type -- type of first name(s) to generate (string: ["initials"|"first"|"mixed"], required)
+
+        Returns string: first name(s) and/or initial(s)
+    '''
     numOfNames = random.choices([1, 2, 3], weights=(60, 30, 10))
     name = ""
     for i in range(numOfNames[0]):
@@ -327,7 +359,15 @@ def nameAndInitialsEntry(fake, type):
         name += " "   
     return name.strip() 
 
+
 def newNameColumnGenerator(count = 1, type = 'full'):
+    ''' Generate fake name
+
+        Keyword arguments:
+        count -- how many names should be generated (int, optional)
+        type -- type of name to generate (string: ["full"|"surname"|"initials"|"first"|"mixed"], required)
+
+    '''
     fake = Faker()
     if type == 'full':
         return [fake.name() + " [Replacement]" for i in range(count)]
