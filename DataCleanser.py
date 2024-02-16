@@ -5,9 +5,23 @@ from pathlib import Path
 from prompt_toolkit.shortcuts import checkboxlist_dialog, radiolist_dialog, button_dialog, input_dialog
 from bs4 import BeautifulSoup
 from faker import Faker
+ 
+# To Do: Option to allow leading zeros on identifier numbers
+# To Do: Additional identifier option of 'don't care' for unique vs repeated
+# To Do: Allow option for alphabetic identifiers, alphanumeric identifiers and identifiers matching particular pattern
+# To Do: Check for repetition in the column headings and deal with it
+# To Do: specify which row to take headings from?
+# To Do: Deal with multiple tabs in same spreadsheet
 
 
-def getPathsFromUser(retry = False):
+
+def getPathsFromUser():
+    ''' Queries the user for, firstly, the path to the folder where the spreadsheets to be processed are and, 
+        secondly, the path to the folder where the processed spreadsheets should be saved.  
+
+        Returns tuple: path to input folder (string), path to output folder (string)    
+    '''
+
     inputFolder = input_dialog(
         title="Set Input Folder",
         text='Enter the full path to the folder holding the spreadsheets to be processed:').run()   
@@ -31,6 +45,14 @@ def getPathsFromUser(retry = False):
 
 
 def getSettingsInputFromUser(total):
+    ''' Query user as to whether they want to apply the settings to all spreadsheets or to deal with the different spreadsheets differently
+    
+        Keyword arguments:
+        total -- the total number of spreadsheets in the folder to be processed (Required)
+
+        Returns boolean - True = process all the spreadsheets the same, Talse = process the spreadsheets separately
+    '''
+
     settingsText = "Do you want to use the following settings for all " + str(total) + " spreadsheets?"
 
     saveIdSettings = button_dialog(
@@ -42,7 +64,17 @@ def getSettingsInputFromUser(total):
     
     return saveIdSettings
 
-def getIdentifierInputFromUser(columnName, count, retry = False, retryMessg = ''):
+def getIdentifierInputFromUser(columnName, retryMessg = ''):
+    ''' For a given column which is being replaced by an identifier, queries the user for how long the identifier should be. 
+        The function is recursive and calls itself to query the user again if the input from the user is not an integer.
+
+        Keyword arguments:
+        columnName -- the name of the column which contains an identifier to be replaced. This is included to 
+                        differentiate as there might be multiple columns. (Required)
+        retryMessg -- an additional message which is set when the recursion is called
+
+        Returns tuple: length of identifier (integer), uniqueness of identifier (boolean)
+    '''
     
     dialogueText = "How many digits? (use numbers only)"
     titleText1 = columnName + ": Identifier Length (1/2)"
@@ -69,14 +101,22 @@ def getIdentifierInputFromUser(columnName, count, retry = False, retryMessg = ''
             ('Unique', True),
             ('Repeated', False)]).run()
     else:
-        return getIdentifierInputFromUser(True)
+        return getIdentifierInputFromUser(columnName, "Number entered for length of identifier not recognised, please enter an integer number.")
 
     identifierSettings = (int(length), uniqueId)
     
     return identifierSettings
 
 def getSpreadsheetInputFromUser(columns, spreadsheetTitle = ''):
+    ''' Query the user for which columns they want to replace values in. 
+        If 'text' is chosen then call the function to get the pattern is one needs to be included
+
+        Keyword arguments:
+        columns -- list of column names (required)
+        spreadsheetTitle -- name of spreadsheet (optional)
+    '''
     patterns = {}
+    idFormats = {}
 
     if spreadsheetTitle != '':
         dialogTitle = "Column Selector: " + spreadsheetTitle
@@ -111,16 +151,27 @@ def getSpreadsheetInputFromUser(columns, spreadsheetTitle = ''):
             columns[column] = result
     else:
         exit()
+
+    if "id_num" in columns.values():
+        for columnName, type in columns.items():
+            if "id_num" in type:
+                idFormats[columnName] = getIdentifierInputFromUser(columnName)
     
     if "quicktext" in columns.values() or "wikitext" in columns.values():
         for columnName, type in columns.items():
             if "text" in type:
                 patterns[columnName] = getPattern(columnName)
 
-
-    return (columns, patterns)
+    return (columns, patterns, idFormats)
 
 def getPattern(columnName, retry = False):
+    ''' Query user for a regex pattern if they want to include a selection of the original content. 
+        Function is recursive if a pattern is entered which is not valid.
+
+        Keyword arguments:
+        columnName -- the name of the column being replaced
+        retry -- whether the function is being retried
+    '''
     #print("Getting pattern")
 
     if retry:
@@ -142,9 +193,26 @@ def getPattern(columnName, retry = False):
         return pattern 
 
 def includeFromOriginalEntry(pattern, originalText, newText):
+    ''' Get any text matching the given pattern from the original text and add it to the replacement text
+
+        Keyword arguments:
+        pattern -- a regex pattern
+        originalText -- original text which is being replaced
+        newText -- new text which is replacing the original text
+    '''
     return([newRow[:-len("[Replacement]")] + " ".join(pattern.findall(oldRow)) + " [Replacement]" if re.search(pattern, oldRow) else newRow for oldRow, newRow in zip(originalText, newText)])
 
-def createNewEntries(filename, sheet, columnsToRedact, patterns):
+
+def createNewEntries(filename, sheet, columnsToRedact, patterns, identifierFormats):
+    ''' Generate the entries for the new spreadsheet
+
+        Keyword arguments:
+        filename -- name of the original spreadsheet (required)
+        sheet -- values in the original spreadsheet (required)
+        columnsToRedact -- list of columns to be redacted (required)
+        patterns -- list of patterns for given columns (required)
+        identifierFormat -- tuple with values for length and uniqueness for given spreadsheet (required)
+    '''
     replacementColumns = {}
 
     #print(patterns)
@@ -191,7 +259,7 @@ def createNewEntries(filename, sheet, columnsToRedact, patterns):
         elif type == "job":
             replacementColumns[columnName] = newJobColumnGenerator(len(originalColumn))
         elif type == "id_num":
-            replacementColumns[columnName] = newIdentifierColumnGenerator(columnName, len(originalColumn), "numerical")
+            replacementColumns[columnName] = newIdentifierColumnGenerator(len(originalColumn), "numerical", identifierFormats[columnName])
         elif type != "fullname":
             raise ValueError("Column type " + type + " not recognised")
 
@@ -287,13 +355,14 @@ def newTextColumnGenerator(count = 1, identifier = '', wiki = False):
     else:
         return [identifier + "_" + str(i + 1) + ": " + textEntry for i, textEntry in enumerate(newQuickTextEntry(count))]
 
-def newIdentifierColumnGenerator(columnName, count = 1, type = "numerical"):
+def newIdentifierColumnGenerator(count = 1, type = "numerical", formats = None):
     # Need to check if numerical, letters, mix and how long
+    if formats == None:
+        (length, unique) = (8, True)
+    else:
+        (length, unique) = formats
 
-    length, unique = getIdentifierInputFromUser(columnName, count)
     if length != None and unique != None:
-
-
 
         if type == "numerical":
             id_string = str(random.randint(1,9)) + ''.join([str(random.randint(0,9)) for i in range(length - 1)])
@@ -317,9 +386,12 @@ def newIdentifierColumnGenerator(columnName, count = 1, type = "numerical"):
         return None
 
 
-def outputNewSheet(file, output, replacements, patterns):
+def outputNewSheet(file, output, replacements, patterns, idLengths):
         sheet = s.getSpreadsheetValues(file)
-        newValues = createNewEntries(os.path.splitext(os.path.basename(file))[0], sheet, replacements, patterns)
+
+        #Need column name for text on dialogue as may be more than one column. 
+        
+        newValues = createNewEntries(os.path.splitext(os.path.basename(file))[0], sheet, replacements, patterns, idLengths)
 
         #print(newValues)
         print("Processing File " + str(index + 1))
@@ -358,6 +430,18 @@ print(newIdentifiers)'''
 
 ''' '''
 
+''' Main program
+
+    Get paths from user
+    Get list of files from the input directory
+    Get bulk setting from user and treat spreadsheets accordingly
+    If bulk changes:
+        Get spreadsheet replacement settings 
+    Otherwise: 
+        Get spreadsheet replacement settings for each spreadsheet and store in userInputBySheet (spreadsheet file name as key)
+    Generate new spreadsheet based on user replacement settings and output to specified folder
+'''
+
 inputFolder, outputFolder = getPathsFromUser()
 
 if outputFolder != None:
@@ -372,7 +456,7 @@ if outputFolder != None:
     userInputBySheet = {}
     if bulk:
         spreadsheetValues = s.getSpreadsheetValues(files[0])
-        userInput, patterns = getSpreadsheetInputFromUser(list(spreadsheetValues.keys()))
+        userInput, patterns, idLengths = getSpreadsheetInputFromUser(list(spreadsheetValues.keys()))
     else:
         for index, file in enumerate(files):
             spreadsheetValues = s.getSpreadsheetValues(file)
@@ -383,11 +467,11 @@ if outputFolder != None:
 
     if len(userInputBySheet) == 0:
         for index, file in enumerate(files):
-            outputNewSheet(file, outputFolder, userInput, patterns)
+            outputNewSheet(file, outputFolder, userInput, patterns, idLengths)
     else:
         for index, file in enumerate(files):
             replacement, patterns = userInputBySheet[os.path.splitext(os.path.basename(file))[0]]
-            outputNewSheet(file, outputFolder, replacement, patterns)
+            outputNewSheet(file, outputFolder, replacement, patterns, idLengths)
         
 
 
