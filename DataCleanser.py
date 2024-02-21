@@ -6,8 +6,8 @@ from prompt_toolkit.shortcuts import checkboxlist_dialog, radiolist_dialog, butt
 from bs4 import BeautifulSoup
 from faker import Faker
  
-# To Do: Option to allow leading zeros on identifier numbers
 # To Do: Additional identifier option of 'don't care' for unique vs repeated
+# To Do: Option to allow sequential numerical identifiers
 # To Do: Allow option for alphabetic identifiers, alphanumeric identifiers and identifiers matching particular pattern
 # To Do: Check for repetition in the column headings and deal with it
 # To Do: specify which row to take headings from?
@@ -50,7 +50,7 @@ def getSettingsInputFromUser(total):
         Keyword arguments:
         total -- the total number of spreadsheets in the folder to be processed [int, required]
 
-        Returns boolean - True = process all the spreadsheets the same, False = process the spreadsheets separately
+        Returns boolean: True = process all the spreadsheets the same, False = process the spreadsheets separately
     '''
 
     settingsText = "Do you want to use the following settings for all " + str(total) + " spreadsheets?"
@@ -73,12 +73,13 @@ def getIdentifierInputFromUser(columnName, retryMessg = ''):
                         differentiate as there might be multiple columns. [string, required]
         retryMessg -- an additional message which is set when the recursion is called [string, optional: default is '']
 
-        Returns tuple: length of identifier (integer), uniqueness of identifier (boolean)
+        Returns tuple: length of identifier (integer), fixed length for identifier (boolean), uniqueness of identifier (boolean)
     '''
     
     dialogueText = "How many digits? (use numbers only)"
-    titleText1 = columnName + ": Identifier Length (1/2)"
-    titleText2 = columnName + ": Identifier Uniqueness (2/2)"
+    titleText1 = columnName + ": Identifier Maximum Length (1/3)"
+    titleText1 = columnName + ": Consistent Length/Leading Zeros (2/3)"
+    titleText2 = columnName + ": Identifier Uniqueness (3/3)"
 
     if retryMessg != '':
         dialogueText += " - " + retryMessg
@@ -91,19 +92,32 @@ def getIdentifierInputFromUser(columnName, retryMessg = ''):
     if length != None:
         length = length.strip()
     else:
-        return (None, None)
+        return (None, None, None)
 
     if length and length.isdigit(): 
-        uniqueId = button_dialog(
+        leadingZero = button_dialog(
         title=titleText2,
-        text="Should the identifiers be unique or repeated?",
+        text="Should the identifiers all be the same length or allow leading zeros?",
         buttons=[
-            ('Unique', True),
-            ('Repeated', False)]).run()
+            ('Same Length', True),
+            ('Allow Leading Zeros', False)]).run()
+        
+
+        if leadingZero != None:
+            uniqueId = button_dialog(
+            title=titleText2,
+            text="Should the identifiers be unique or repeated?",
+            buttons=[
+                ('Unique', True),
+                ('Repeated', False)]).run()            
+
+        else:
+            return (length, None, None)
+
     else:
         return getIdentifierInputFromUser(columnName, "Number entered for length of identifier not recognised, please enter an integer number.")
 
-    identifierSettings = (int(length), uniqueId)
+    identifierSettings = (int(length), leadingZero, uniqueId)
     
     return identifierSettings
 
@@ -439,12 +453,17 @@ def newIdentifierColumnGenerator(count = 1, type = "numerical", formats = (8, Tr
         Returns list: generated identifiers
     '''
 
-    (length, unique) = formats
+    (length, consistent, unique) = formats
 
-    if length != None and unique != None:
+    if length != None and consistent != None and unique != None:
 
         if type == "numerical":
-            id_string = str(random.randint(1,9)) + ''.join([str(random.randint(0,9)) for i in range(length - 1)])
+
+            if consistent: 
+                id_string = str(random.randint(1,9)) + ''.join([str(random.randint(0,9)) for i in range(length - 1)])
+            else:
+                id_string = ''.join([str(random.randint(0,9)) for i in range(length)])
+
             newIdentifier = int(id_string)
 
             if unique:
