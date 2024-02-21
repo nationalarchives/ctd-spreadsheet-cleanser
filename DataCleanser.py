@@ -6,7 +6,6 @@ from prompt_toolkit.shortcuts import checkboxlist_dialog, radiolist_dialog, butt
 from bs4 import BeautifulSoup
 from faker import Faker
  
-# To Do: Additional identifier option of 'don't care' for unique vs repeated
 # To Do: Option to allow sequential numerical identifiers
 # To Do: Allow option for alphabetic identifiers, alphanumeric identifiers and identifiers matching particular pattern
 # To Do: Check for repetition in the column headings and deal with it
@@ -73,13 +72,13 @@ def getIdentifierInputFromUser(columnName, retryMessg = ''):
                         differentiate as there might be multiple columns. [string, required]
         retryMessg -- an additional message which is set when the recursion is called [string, optional: default is '']
 
-        Returns tuple: length of identifier (integer), fixed length for identifier (boolean), uniqueness of identifier (boolean)
+        Returns tuple: length of identifier (integer), fixed length for identifier (boolean), uniqueness of identifier (string: "unique|nonunique|repeated")
     '''
     
     dialogueText = "How many digits? (use numbers only)"
     titleText1 = columnName + ": Identifier Maximum Length (1/3)"
-    titleText1 = columnName + ": Consistent Length/Leading Zeros (2/3)"
-    titleText2 = columnName + ": Identifier Uniqueness (3/3)"
+    titleText2 = columnName + ": Consistent Length/Leading Zeros (2/3)"
+    titleText3 = columnName + ": Identifier Uniqueness (3/3)"
 
     if retryMessg != '':
         dialogueText += " - " + retryMessg
@@ -99,27 +98,26 @@ def getIdentifierInputFromUser(columnName, retryMessg = ''):
         title=titleText2,
         text="Should the identifiers all be the same length or allow leading zeros?",
         buttons=[
-            ('Same Length', True),
-            ('Allow Leading Zeros', False)]).run()
+            ('= Length', True),
+            ('Leading 0s', False)]).run()
         
 
         if leadingZero != None:
             uniqueId = button_dialog(
-            title=titleText2,
+            title=titleText3,
             text="Should the identifiers be unique or repeated?",
             buttons=[
-                ('Unique', True),
-                ('Repeated', False)]).run()            
+                ('Unique', 'unique'),
+                ('Non-Unique', 'nonunique'),
+                ('Repeated', 'repeated')]).run()            
 
         else:
             return (length, None, None)
 
     else:
         return getIdentifierInputFromUser(columnName, "Number entered for length of identifier not recognised, please enter an integer number.")
-
-    identifierSettings = (int(length), leadingZero, uniqueId)
     
-    return identifierSettings
+    return (int(length), leadingZero, uniqueId)
 
 def getSpreadsheetInputFromUser(columns, spreadsheetTitle = ''):
     ''' Query the user for which columns they want to replace values in. 
@@ -442,13 +440,13 @@ def newTextColumnGenerator(count = 1, identifier = '', wiki = False):
     else:
         return [identifier + str(i + 1) + ": " + textEntry for i, textEntry in enumerate(newQuickTextEntry(count))]
 
-def newIdentifierColumnGenerator(count = 1, type = "numerical", formats = (8, True)):
+def newIdentifierColumnGenerator(count = 1, type = "numerical", formats = (8, True, "nonunique")):
     ''' Generate fake identifier
 
         Keyword arguments:
         count -- how many identifiers should be generated [int, optional: default is 1]
         type -- type of identifier  (currently only numerical identifiers implemented)  [string, optional: default is "numerical"]
-        formats -- tuple with values for length of identifier and whether it is unique [tuple, optional: default is length 8 and unique]
+        formats -- tuple with values for length of identifier and whether it is unique [tuple, optional: default is length 8, consistent length and non-unique]
     
         Returns list: generated identifiers
     '''
@@ -459,20 +457,20 @@ def newIdentifierColumnGenerator(count = 1, type = "numerical", formats = (8, Tr
 
         if type == "numerical":
 
-            if consistent: 
-                id_string = str(random.randint(1,9)) + ''.join([str(random.randint(0,9)) for i in range(length - 1)])
-            else:
-                id_string = ''.join([str(random.randint(0,9)) for i in range(length)])
+            newIdentifier = generateNumber(length, consistent)
 
-            newIdentifier = int(id_string)
-
-            if unique:
+            if unique == 'unique':
                 identifier_set = set()
                 while len(identifier_set) < count:
                     identifier_set.add(newIdentifier)
-                    newIdentifier = int(str(random.randint(1,9)) + ''.join([str(random.randint(0,9)) for i in range(length - 1)]))
+                    newIdentifier = generateNumber(length, consistent)
 
                 identifiers = list(identifier_set)
+            elif unique == 'nonunique':
+                identifiers = []
+                while len(identifiers) < count:
+                    identifiers.append(newIdentifier)
+                    newIdentifier = generateNumber(length, consistent)                              
             else:
                 identifiers = [newIdentifier] * count
             
@@ -483,6 +481,23 @@ def newIdentifierColumnGenerator(count = 1, type = "numerical", formats = (8, Tr
     else:
         return None
 
+
+def generateNumber(length, consistent = True):
+    ''' Generate a number given a length and whether leading zeros are allowed
+
+        Keyword arguments:
+        length -- (max) length of number to be generated [int, required]
+        consistent -- consistent length or allowing leading zeros [boolean, optional: default is True (consistent length)]
+
+        return int: number which matches the desired characteristics
+    '''
+
+    if consistent: 
+        id_string = str(random.randint(1,9)) + ''.join([str(random.randint(0,9)) for i in range(length - 1)])
+    else:
+        id_string = ''.join([str(random.randint(0,9)) for i in range(length)])
+
+    return int(id_string)
 
 def outputNewSheet(file, output, replacements, patterns, idLengths):
     ''' Opens the original file to get the values, processes them to generate the values for a replacement spreadsheet and saves the new version
