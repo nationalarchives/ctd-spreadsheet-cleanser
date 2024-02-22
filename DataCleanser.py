@@ -6,8 +6,9 @@ from prompt_toolkit.shortcuts import checkboxlist_dialog, radiolist_dialog, butt
 from bs4 import BeautifulSoup
 from faker import Faker
  
-# To Do: Option to allow sequential numerical identifiers
-# To Do: Allow option for alphabetic identifiers, alphanumeric identifiers and identifiers matching particular pattern
+# To Do: Allow option for alphabetic identifiers and alphanumeric identifiers 
+# To Do: Option to allow sequential numerical identifiers (starting from random number or starting from given number)
+# To Do: Allow option for identifiers matching particular pattern
 # To Do: Check for repetition in the column headings and deal with it
 # To Do: specify which row to take headings from?
 # To Do: Deal with multiple tabs in same spreadsheet
