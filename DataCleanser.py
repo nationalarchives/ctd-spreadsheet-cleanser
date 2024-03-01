@@ -11,7 +11,6 @@ from faker import Faker
 # To Do: Allow option for identifiers matching particular pattern
 # To Do: Check for repetition in the column headings and deal with it
 # To Do: specify which row to take headings from?
-# To Do: Deal with multiple tabs in same spreadsheet
 
 
 
@@ -41,8 +40,6 @@ def getPathsFromUser():
         raise FileNotFoundError(outputFolder + " not found")
     else:
         return(inputFolder, outputFolder)
-
-
 
 def getSettingsInputFromUser(total):
     ''' Query user as to whether they want to apply the settings to all spreadsheets or to deal with the different spreadsheets differently
@@ -221,7 +218,6 @@ def includeFromOriginalEntry(pattern, originalText, newText):
     '''
     return([newRow[:-len("[Replacement]")] + " ".join(pattern.findall(oldRow)) + " [Replacement]" if re.search(pattern, oldRow) else newRow for oldRow, newRow in zip(originalText, newText)])
 
-
 def createNewEntries(filename, sheet, columnsToRedact, patterns, identifierFormats):
     ''' Generate the entries for the new spreadsheet
 
@@ -350,7 +346,6 @@ def newQuickTextEntry(count = 1):
     fake = Faker()
     return [fake.paragraph() + " [Replacement]" for i in range(count)]
 
-
 def nameAndInitialsEntry(fake, type):
     ''' Generate fake first name(s) and/or initial(s) with between one and three parts
 
@@ -371,7 +366,6 @@ def nameAndInitialsEntry(fake, type):
             name += (fake.first_name()[1]).upper()
         name += " "   
     return name.strip() 
-
 
 def newNameColumnGenerator(count = 1, type = 'full'):
     ''' Generate fake name
@@ -405,7 +399,6 @@ def newAddressColumnGenerator(count = 1):
     fake = Faker('en_GB')
     return [(fake.address()).replace("\n", ", ") + " [Replacement]" for i in range(count)]
 
-
 def newJobColumnGenerator(count = 1):
     ''' Generate fake occupation
 
@@ -417,7 +410,6 @@ def newJobColumnGenerator(count = 1):
 
     fake = Faker()
     return [fake.job() + " [Replacement]" for i in range(count)]
-
 
 def newTextColumnGenerator(count = 1, identifier = '', wiki = False):
     ''' Generate fake text of the specified type
@@ -482,7 +474,6 @@ def newIdentifierColumnGenerator(count = 1, type = "numerical", formats = (8, Tr
     else:
         return None
 
-
 def generateNumber(length, consistent = True):
     ''' Generate a number given a length and whether leading zeros are allowed
 
@@ -500,25 +491,29 @@ def generateNumber(length, consistent = True):
 
     return int(id_string)
 
-def outputNewSheet(file, output, replacements, patterns, idLengths):
+def outputNewSheet(new_workbook, sheet_name, replacements, patterns, idLengths):
     ''' Opens the original file to get the values, processes them to generate the values for a replacement spreadsheet and saves the new version
 
     Keyword arguments:
-    file -- path to original spreadsheet to be processed [string, required]
-    output -- path to folder where output spreadsheets are to be saved [string, required]
+    new_workbook -- workbook that the sheet is in [workbook, required]
+    sheet_name -- name of sheet that is being generated [string, required]
     replacements -- list of what type of replacements are required by column name [dictionary, required]
     patterns -- list of any patterns of test which should be copied across the original to the processed spreadsheet during a text replacement by column name [dictionary, required]
     idLengths -- list of identifier requirements by column name [dictionary, required]
-    '''
-    sheet = s.getSpreadsheetValues(file)
 
-    #Need column name for text on dialogue as may be more than one column. 
-    
-    newValues = createNewEntries(os.path.splitext(os.path.basename(file))[0], sheet, replacements, patterns, idLengths)
+    return workbook: workbook with new sheet filled in
+    '''
+    orig_sheet_values = s.getSpreadsheetValues(file, sheet_name)
+
+    #Need column name for text on dialogue as may be more than one column.   
+    new_values = createNewEntries(os.path.splitext(os.path.basename(file))[0], orig_sheet_values, replacements, patterns, idLengths)
 
     #print(newValues)
-    print("Processing File " + str(index + 1))
-    s.createSpreadsheetWithValues(Path(output), file, "cleaned", sheet, newValues)
+
+    #s.createSpreadsheetWithValues(Path(output), file, "cleaned", sheet, newValues)
+    s.createSheetWithValues(new_workbook, orig_sheet_values, new_values, sheet_name)
+
+    return new_workbook
 
 
 '''
@@ -569,6 +564,7 @@ inputFolder, outputFolder = getPathsFromUser()
 
 if outputFolder != None:
 
+    # Get list of files
     files = s.getFileList(Path(inputFolder))
 
     if len(files) > 1:
@@ -576,12 +572,16 @@ if outputFolder != None:
     else:
         bulk = True
 
+    # For each file
     userInputBySheet = {}
+
     if bulk:
+        # Getting replacement information by column names based on first sheet in first spreadsheet
         spreadsheetValues = s.getSpreadsheetValues(files[0])
         userInput, patterns, idLengths = getSpreadsheetInputFromUser(list(spreadsheetValues.keys()))
     else:
-        for index, file in enumerate(files):
+        # Getting replacement information by column name for each spreadsheet based on columns in first sheet in each spreadsheet
+        for index, file in enumerate(files):         
             spreadsheetValues = s.getSpreadsheetValues(file)
             spreadsheetName = os.path.splitext(os.path.basename(file))[0] + " (" + str(index + 1) + "/" + str(len(files)) + ")"
             userInputBySheet[os.path.splitext(os.path.basename(file))[0]] = getSpreadsheetInputFromUser(list(spreadsheetValues.keys()), spreadsheetName)
@@ -589,12 +589,35 @@ if outputFolder != None:
 
 
     if len(userInputBySheet) == 0:
+        # For every spreadsheet
         for index, file in enumerate(files):
-            outputNewSheet(file, outputFolder, userInput, patterns, idLengths)
+            new_workbook = s.setupNewWorkbook(file)
+            print("Processing File " + str(index + 1))
+
+            for sheet in s.getSheetListByFilename(file):
+                print("Processing sheet " + sheet)
+                orig_values_from_sheet = s.getSpreadsheetValues(file, sheet)
+                new_workbook = outputNewSheet(new_workbook, sheet, userInput, patterns, idLengths)
+
+            #outputNewSheet(new_workbook, outputFolder, userInput, patterns, idLengths)
+            s.saveWorkbook(new_workbook, outputFolder, file, "cleaned")
     else:
+        # For each spreadsheet (individual replacement values)
         for index, file in enumerate(files):
-            replacement, patterns = userInputBySheet[os.path.splitext(os.path.basename(file))[0]]
-            outputNewSheet(file, outputFolder, replacement, patterns, idLengths)
+            new_workbook = s.setupNewWorkbook(file)
+            print("Processing File " + str(index + 1))
+
+            userInput, patterns, idLengths = userInputBySheet[os.path.splitext(os.path.basename(file))[0]]
+
+            for sheet in s.getSheetListByFilename(file):
+                print("Processing sheet " + sheet)
+                orig_values_from_sheet = s.getSpreadsheetValues(file, sheet)
+                new_workbook = outputNewSheet(new_workbook, sheet, userInput, patterns, idLengths)
+
+            #outputNewSheet(new_workbook, outputFolder, userInput, patterns, idLengths)
+            s.saveWorkbook(new_workbook, outputFolder, file, "cleaned")
+            
+            #outputNewSheet(file, outputFolder, replacement, patterns, idLengths)
         
 
 

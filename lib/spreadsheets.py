@@ -5,14 +5,19 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font
 #from pathlib import Path
 
-'''Version 1.0'''
+'''Version 2.0'''
+''' Version 2.0 adds the ability to deal with spreadsheets with multiple sheets'''
 
-def getSpreadsheetValues(filename):
-    ''' Gets spreadsheet by name and returns the spreadsheet as a worksheet and a list of column headings '''
+def getSpreadsheetValues(filename, sheetname = ""):
+    ''' Gets spreadsheet by name and returns the specified sheet from the spreadsheet as a worksheet and a list of column headings. 
+        If no sheet is specified it defaults to returning the first sheet '''
     #path = os.path.join('data', filename) 
     wb = load_workbook(filename)
     
-    sheet = wb.worksheets[0]
+    if sheetname != "":
+        sheet = wb[sheetname]
+    else:
+        sheet = wb.worksheets[0]
     values={}
     
     for col in sheet.columns:
@@ -24,17 +29,24 @@ def getSpreadsheetValues(filename):
             
     return (values)
 
+def getSheetListByFilename(filename):
+    ''' Get list of sheets in the specified workbook '''
+    wb = load_workbook(filename)
+    return wb.sheetnames
 
 def getFileList(myDir):
     ''' Get a list of xlsx files in the given directory '''
     return [file for file in myDir.glob("[!~.]*.xlsx")]
 
 
-def createSpreadsheetWithValues(path, filename, filenameExtra, values, newValues, filter = False, min = ''):
-    ''' print out a new spreadsheet with the supplied values (columns in newValues with the same title replace the original version in values, can also use filter columns to replace values within a column rather than an entire column)'''
-    
-    wb = Workbook()
-    newSheet = wb.active
+def createSheetWithValues(workbook, values, newValues, sheetname = '', filter = False, min = ''):
+    ''' Create a new sheet within the specified workbook with the supplied values (columns in newValues with the same title replace the original version
+        in values, can also use filter columns to replace values within a column rather than an entire column)'''
+
+    if sheetname == '':
+        newSheet = workbook.active
+    else:
+        newSheet = workbook[sheetname]
     
     col = 1
     maxRow = 0
@@ -72,12 +84,50 @@ def createSpreadsheetWithValues(path, filename, filenameExtra, values, newValues
         col+=1 
 
     #print(maxRow)
-    if maxRow > 2:   
-        if not os.path.exists(path):
-            os.makedirs(path)
+    #if maxRow > 2:   
+    return workbook
 
-        newFilename = os.path.splitext(os.path.basename(filename))[0] + "_" + str(filenameExtra) + os.path.splitext(os.path.basename(filename))[1]
-        newFile = os.path.join(path, newFilename)  
-        wb.save(newFile)
+def setupNewWorkbook(filename):
+    ''' Create and return a workbook that matches the original spreadsheet'''
 
-        print("New file " + newFile)
+    original_wb = load_workbook(filename)
+
+    return createWorkbook(original_wb.sheetnames) 
+
+
+
+def createWorkbook(sheets = []):
+    ''' Create and return a new workbook with the specified sheets'''
+    wb = Workbook()
+
+    if len(sheets) < 1:
+        return wb
+    else:
+        for sheetname in sheets:
+            wb.create_sheet(sheetname)
+
+        current_sheets = wb.sheetnames
+        extras = [item for item in current_sheets if item not in sheets]
+
+        for extra in extras:
+            wb.remove(wb[extra])
+
+    return wb
+
+
+def saveWorkbook(workbook, path, filename, filenameExtra = ''):
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+    if filenameExtra != '':
+        filenameExtra = "_" + str(filenameExtra)
+
+    newFilename = os.path.splitext(os.path.basename(filename))[0] + str(filenameExtra) + os.path.splitext(os.path.basename(filename))[1]
+    newFile = os.path.join(path, newFilename)  
+    workbook.save(newFile)
+
+    print("New file " + newFile)
+
+
+
+   
