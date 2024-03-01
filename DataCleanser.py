@@ -592,10 +592,10 @@ if outputFolder != None:
         # For every spreadsheet
         for index, file in enumerate(files):
             new_workbook = s.setupNewWorkbook(file)
-            print("Processing File " + str(index + 1))
+            print("Processing File: " + str(index + 1))
 
             for sheet in s.getSheetListByFilename(file):
-                print("Processing sheet " + sheet)
+                print("Processing sheet: " + sheet)
                 orig_values_from_sheet = s.getSpreadsheetValues(file, sheet)
                 new_workbook = outputNewSheet(new_workbook, sheet, userInput, patterns, idLengths)
 
@@ -605,12 +605,12 @@ if outputFolder != None:
         # For each spreadsheet (individual replacement values)
         for index, file in enumerate(files):
             new_workbook = s.setupNewWorkbook(file)
-            print("Processing File " + str(index + 1))
+            print("Processing File: " + str(index + 1))
 
             userInput, patterns, idLengths = userInputBySheet[os.path.splitext(os.path.basename(file))[0]]
 
             for sheet in s.getSheetListByFilename(file):
-                print("Processing sheet " + sheet)
+                print("Processing sheet: " + sheet)
                 orig_values_from_sheet = s.getSpreadsheetValues(file, sheet)
                 new_workbook = outputNewSheet(new_workbook, sheet, userInput, patterns, idLengths)
 
