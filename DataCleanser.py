@@ -6,6 +6,9 @@ from prompt_toolkit.shortcuts import checkboxlist_dialog, radiolist_dialog, butt
 from bs4 import BeautifulSoup
 from faker import Faker
  
+# To Do: Allow it to skip the replacement (with a warning) if the specified column isn't found rather than completely failing (or query user for what to do?)
+# To Do: Make heading match non-case sensitive
+# TO Do: Selecting 'Cancel' at any point during user input should end program 
 # To Do: Allow option for alphabetic identifiers and alphanumeric identifiers 
 # To Do: Option to allow sequential numerical identifiers (starting from random number or starting from given number)
 # To Do: Allow option for identifiers matching particular pattern
