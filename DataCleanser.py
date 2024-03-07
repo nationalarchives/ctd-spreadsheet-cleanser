@@ -6,16 +6,31 @@ from prompt_toolkit.shortcuts import checkboxlist_dialog, radiolist_dialog, butt
 from bs4 import BeautifulSoup
 from faker import Faker
  
-# To Do: Allow it to skip the replacement (with a warning) if the specified column isn't found rather than completely failing (or query user for what to do?)
+'''
 # To Do: Make heading match non-case sensitive
 # TO Do: Selecting 'Cancel' at any point during user input should end program 
 # To Do: Allow option for alphabetic identifiers and alphanumeric identifiers 
 # To Do: Option to allow sequential numerical identifiers (starting from random number or starting from given number)
 # To Do: Allow option for identifiers matching particular pattern
-# To Do: Check for repetition in the column headings and deal with it
 # To Do: specify which row to take headings from?
 
+Version 2.0
+NOTE: Assumes that different sheets in the same spreadsheet have the same columns. If the first sheet has non-unique columns
+and other sheets don't have the duplication then replacements won't be applied to columns with matching names that are unique 
+within a sheet but which are non-unique in the first sheet. 
+'''
 
+
+def displayHeading(heading):
+    ''' Get the display version of the heading - changes the 'underscore count' suffix automatically added when non-unique column 
+        headings exist with a number in brackets after the heading
+
+        Keyword arguments:
+        heading -- a heading [string, required]
+
+        Returns string: display version of the heading
+    '''
+    return re.sub(re.compile(r'^(.*)_(\d)$'), r'\1 (\2)', heading)
 
 def getPathsFromUser():
     ''' Queries the user for, firstly, the path to the folder where the spreadsheets to be processed are and, 
@@ -77,9 +92,9 @@ def getIdentifierInputFromUser(columnName, retryMessg = ''):
     '''
     
     dialogueText = "How many digits? (use numbers only)"
-    titleText1 = columnName + ": Identifier Maximum Length (1/3)"
-    titleText2 = columnName + ": Consistent Length/Leading Zeros (2/3)"
-    titleText3 = columnName + ": Identifier Uniqueness (3/3)"
+    titleText1 = displayHeading(columnName) + ": Identifier Maximum Length (1/3)"
+    titleText2 = displayHeading(columnName) + ": Consistent Length/Leading Zeros (2/3)"
+    titleText3 = displayHeading(columnName) + ": Identifier Uniqueness (3/3)"
 
     if retryMessg != '':
         dialogueText += " - " + retryMessg
@@ -141,7 +156,7 @@ def getSpreadsheetInputFromUser(columns, spreadsheetTitle = ''):
     columnResultsArray = checkboxlist_dialog(
         title=dialogTitle,
         text="Which columns would you like to replace the text in?",
-        values = [(heading, heading) for heading in columns]).run()
+        values = [(heading, displayHeading(heading)) for heading in columns]).run()
 
     if columnResultsArray:
         columns = dict([(key, "") for key in columnResultsArray])
@@ -149,7 +164,7 @@ def getSpreadsheetInputFromUser(columns, spreadsheetTitle = ''):
         for column in columnResultsArray:
             result = radiolist_dialog(
                 title="Replacement Type",
-                text="Replace " + column + " as:",
+                text="Replace " + displayHeading(column) + " as:",
                 values=[
                     ("fullname", "Fullname"),
                     ("first", "First names"),
@@ -192,9 +207,9 @@ def getPattern(columnName, retry = False):
     #print("Getting pattern")
 
     if retry:
-        titleText = 'Regex pattern for "' + columnName + '" not valid. Re-enter pattern or leave blank'
+        titleText = 'Regex pattern for "' + displayHeading(columnName) + '" not valid. Re-enter pattern or leave blank'
     else:
-        titleText = 'Include pattern in text for "' + columnName + '"'
+        titleText = 'Include pattern in text for "' + displayHeading(columnName) + '"'
 
 
     pattern = input_dialog(
@@ -235,12 +250,11 @@ def createNewEntries(filename, sheet, columnsToRedact, patterns, identifierForma
     '''
     replacementColumns = {}
 
-    #print(patterns)
     linked = False
     firsttype = ""
 
     types = columnsToRedact.values()
-    if "fullname" in types and "surname" in types and ("first" in types or "initials" in types or "mixed" in types):
+    if "fullname" in types and ("surname" in types or "first" in types or "initials" in types or "mixed" in types):
         linked = True
         if "first" in types:
             firsttype = "first"
@@ -249,64 +263,78 @@ def createNewEntries(filename, sheet, columnsToRedact, patterns, identifierForma
         elif "mixed" in types:
             firsttype = "mixed"
 
+    try: 
+        for columnName, type in columnsToRedact.items():
+            originalColumn = sheet[columnName]
 
-    for columnName, type in columnsToRedact.items():
-        originalColumn = sheet[columnName]
-        while originalColumn and originalColumn[-1] == '':
-            originalColumn = originalColumn[:-1]
+            # remove blank cells at the end of the column    
+            while originalColumn and originalColumn[-1] == '':
+                originalColumn = originalColumn[:-1]
 
-        #print(columnName + ": " + type)
-        #print("Length of column: " + str(len(column)))
+            #print(columnName + ": " + type)
+            #print("Length of column: " + str(len(column)))
+            #print(originalColumn)
 
-        identifier = filename + "_" + columnName
+            identifier = filename + "_" + columnName
 
-        if type == "surname":
-            replacementColumns[columnName] = newNameColumnGenerator(len(originalColumn), "surname")
-        elif type == "first":
-            replacementColumns[columnName] = newNameColumnGenerator(len(originalColumn), "first")
-        elif type == "initials":
-            replacementColumns[columnName] = newNameColumnGenerator(len(originalColumn), "initials")
-        elif type == "mixed":
-            replacementColumns[columnName] = newNameColumnGenerator(len(originalColumn), "mixed")
-        elif type == "fullname" and not(linked):
-            replacementColumns[columnName] = newNameColumnGenerator(len(originalColumn), "full") 
-        elif type == "quicktext":
-            replacementColumns[columnName] = newTextColumnGenerator(len(originalColumn), identifier)
-        elif type == "wikitext":
-            replacementColumns[columnName] = newTextColumnGenerator(len(originalColumn), identifier, True)
-        elif type == "addy":
-            replacementColumns[columnName] = newAddressColumnGenerator(len(originalColumn))
-        elif type == "job":
-            replacementColumns[columnName] = newJobColumnGenerator(len(originalColumn))
-        elif type == "id_num":
-            replacementColumns[columnName] = newIdentifierColumnGenerator(len(originalColumn), "numerical", identifierFormats[columnName])
-        elif type != "fullname":
-            raise ValueError("Column type " + type + " not recognised")
+            if type == "surname":
+                replacementColumns[columnName] = newNameColumnGenerator(len(originalColumn), "surname")
+            elif type == "first":
+                replacementColumns[columnName] = newNameColumnGenerator(len(originalColumn), "first")
+            elif type == "initials":
+                replacementColumns[columnName] = newNameColumnGenerator(len(originalColumn), "initials")
+            elif type == "mixed":
+                replacementColumns[columnName] = newNameColumnGenerator(len(originalColumn), "mixed")
+            elif type == "fullname" and not(linked):
+                replacementColumns[columnName] = newNameColumnGenerator(len(originalColumn), "full") 
+            elif type == "quicktext":
+                replacementColumns[columnName] = newTextColumnGenerator(len(originalColumn), identifier)
+            elif type == "wikitext":
+                replacementColumns[columnName] = newTextColumnGenerator(len(originalColumn), identifier, True)
+            elif type == "addy":
+                replacementColumns[columnName] = newAddressColumnGenerator(len(originalColumn))
+            elif type == "job":
+                replacementColumns[columnName] = newJobColumnGenerator(len(originalColumn))
+            elif type == "id_num":
+                replacementColumns[columnName] = newIdentifierColumnGenerator(len(originalColumn), "numerical", identifierFormats[columnName])
+            elif type != "fullname":
+                raise ValueError("Column type " + type + " not recognised")
 
 
-        if "text" in type and columnName in patterns.keys():
-            pattern = patterns[columnName]
-            if pattern != '':
-                replacementColumns[columnName] = includeFromOriginalEntry(pattern, originalColumn, replacementColumns[columnName])
+            if "text" in type and columnName in patterns.keys():
+                pattern = patterns[columnName]
+                if pattern != '':
+                    replacementColumns[columnName] = includeFromOriginalEntry(pattern, originalColumn, replacementColumns[columnName])
 
-            #print(replacementColumns[columnName])   
+                #print(replacementColumns[columnName])   
+
+    except KeyError:
+        print("Error: " + columnName + " not found in sheet in " + filename + ". Replacement is being skipped as column not available. Check spreadsheet to ensure all the columns are labelled as expected.")
 
     if linked:
         firstpart = []
         secondpart = [] 
         fullnameColumn = ""       
+        try: 
+            for columnName, type in columnsToRedact.items():
+                if type == "surname":
+                    secondpart = replacementColumns[columnName]
+                elif type == firsttype:
+                    firstpart = replacementColumns[columnName]
 
-        for columnName, type in columnsToRedact.items():
-            if type == "surname":
-                secondpart = replacementColumns[columnName]
-            elif type == firsttype:
-                firstpart = replacementColumns[columnName]
+                if type == "fullname":
+                    fullnameColumn = columnName
 
-            if type == "fullname":
-                fullnameColumn = columnName
-        
-        replacementColumns[fullnameColumn] = [fn[:-len("[Replacement]")] + sn for fn, sn in zip(firstpart, secondpart)]
-        
+            if firstpart == []:
+                firstpart = newNameColumnGenerator(len(sheet[fullnameColumn]), "first")
+
+            if secondpart == []:
+                secondpart = newNameColumnGenerator(len(sheet[fullnameColumn]), "surname")
+            
+            replacementColumns[fullnameColumn] = [fn[:-len("[Replacement]")] + sn for fn, sn in zip(firstpart, secondpart)]
+        except KeyError:
+            print("Error: " + columnName + " not found so not linked to other name components.")
+
     return replacementColumns
 
 def newWikiTextEntry(sleep = False):
@@ -494,30 +522,26 @@ def generateNumber(length, consistent = True):
 
     return int(id_string)
 
-def outputNewSheet(new_workbook, sheet_name, replacements, patterns, idLengths):
+def outputNewSheet(file_path, sheet_name, new_workbook, replacements, patterns, idLengths):
     ''' Opens the original file to get the values, processes them to generate the values for a replacement spreadsheet and saves the new version
 
     Keyword arguments:
-    new_workbook -- workbook that the sheet is in [workbook, required]
+    file_path -- name and full path to spreadsheet being processed [string, required]
     sheet_name -- name of sheet that is being generated [string, required]
+    workbook -- workbook that the sheet is in [workbook, required]
     replacements -- list of what type of replacements are required by column name [dictionary, required]
     patterns -- list of any patterns of test which should be copied across the original to the processed spreadsheet during a text replacement by column name [dictionary, required]
     idLengths -- list of identifier requirements by column name [dictionary, required]
 
     return workbook: workbook with new sheet filled in
     '''
-    orig_sheet_values = s.getSpreadsheetValues(file, sheet_name)
-
-    #Need column name for text on dialogue as may be more than one column.   
-    new_values = createNewEntries(os.path.splitext(os.path.basename(file))[0], orig_sheet_values, replacements, patterns, idLengths)
-
-    #print(newValues)
+    orig_sheet_values, mapping = s.getSpreadsheetValues(file_path, sheet_name)
+ 
+    new_sheet_values = createNewEntries(os.path.splitext(os.path.basename(file_path))[0], orig_sheet_values, replacements, patterns, idLengths)
 
     #s.createSpreadsheetWithValues(Path(output), file, "cleaned", sheet, newValues)
-    s.createSheetWithValues(new_workbook, orig_sheet_values, new_values, sheet_name)
-
-    return new_workbook
-
+    return s.createSheetWithValues(new_workbook, orig_sheet_values, mapping, new_sheet_values, sheet_name)
+        
 
 '''
 print("Surname:")
@@ -580,27 +604,26 @@ if outputFolder != None:
 
     if bulk:
         # Getting replacement information by column names based on first sheet in first spreadsheet
-        spreadsheetValues = s.getSpreadsheetValues(files[0])
-        userInput, patterns, idLengths = getSpreadsheetInputFromUser(list(spreadsheetValues.keys()))
+        spreadsheetValues, mapping = s.getSpreadsheetValues(files[0])
+        userInput, patterns, idLengths = getSpreadsheetInputFromUser(list(mapping.keys()))
     else:
         # Getting replacement information by column name for each spreadsheet based on columns in first sheet in each spreadsheet
         for index, file in enumerate(files):         
-            spreadsheetValues = s.getSpreadsheetValues(file)
-            spreadsheetName = os.path.splitext(os.path.basename(file))[0] + " (" + str(index + 1) + "/" + str(len(files)) + ")"
-            userInputBySheet[os.path.splitext(os.path.basename(file))[0]] = getSpreadsheetInputFromUser(list(spreadsheetValues.keys()), spreadsheetName)
+            spreadsheetValues, mapping = s.getSpreadsheetValues(file)
+            spreadsheetTitle = os.path.splitext(os.path.basename(file))[0] + " (" + str(index + 1) + "/" + str(len(files)) + ")"
 
-
+            userInputBySheet[os.path.splitext(os.path.basename(file))[0]] = getSpreadsheetInputFromUser(list(mapping.keys()), spreadsheetTitle)
 
     if len(userInputBySheet) == 0:
         # For every spreadsheet
         for index, file in enumerate(files):
             new_workbook = s.setupNewWorkbook(file)
-            print("Processing File: " + str(index + 1))
+            print("Processing File: " + str(index + 1) + " - " + os.path.basename(file))
 
             for sheet in s.getSheetListByFilename(file):
                 print("Processing sheet: " + sheet)
-                orig_values_from_sheet = s.getSpreadsheetValues(file, sheet)
-                new_workbook = outputNewSheet(new_workbook, sheet, userInput, patterns, idLengths)
+                orig_values_from_sheet, mapping = s.getSpreadsheetValues(file, sheet)
+                new_workbook = outputNewSheet(file, sheet, new_workbook, userInput, patterns, idLengths)
 
             #outputNewSheet(new_workbook, outputFolder, userInput, patterns, idLengths)
             s.saveWorkbook(new_workbook, outputFolder, file, "cleaned")
@@ -608,14 +631,17 @@ if outputFolder != None:
         # For each spreadsheet (individual replacement values)
         for index, file in enumerate(files):
             new_workbook = s.setupNewWorkbook(file)
-            print("Processing File: " + str(index + 1))
+            print("Processing File " + str(index + 1) + ": " + os.path.basename(file))
 
-            userInput, patterns, idLengths = userInputBySheet[os.path.splitext(os.path.basename(file))[0]]
+            userInput, patterns, idLengths  = userInputBySheet[os.path.splitext(os.path.basename(file))[0]]
 
             for sheet in s.getSheetListByFilename(file):
                 print("Processing sheet: " + sheet)
-                orig_values_from_sheet = s.getSpreadsheetValues(file, sheet)
-                new_workbook = outputNewSheet(new_workbook, sheet, userInput, patterns, idLengths)
+
+                orig_values_from_sheet, mapping = s.getSpreadsheetValues(file, sheet)
+                
+                new_workbook = outputNewSheet(file, sheet, new_workbook, userInput, patterns, idLengths)
+
 
             #outputNewSheet(new_workbook, outputFolder, userInput, patterns, idLengths)
             s.saveWorkbook(new_workbook, outputFolder, file, "cleaned")
