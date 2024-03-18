@@ -1,12 +1,13 @@
 import os, re, requests, time, random
 from lib import spreadsheets as s
 from pathlib import Path
-#from datetime import date
+from datetime import date
 from prompt_toolkit.shortcuts import checkboxlist_dialog, radiolist_dialog, button_dialog, input_dialog
 from bs4 import BeautifulSoup
 from faker import Faker
  
 '''
+# To Do: Add date of birth, with boundary options
 # To Do: Make heading match non-case sensitive
 # TO Do: Selecting 'Cancel' at any point during user input should end program 
 # To Do: Allow option for alphabetic identifiers and alphanumeric identifiers 
@@ -143,10 +144,11 @@ def getSpreadsheetInputFromUser(columns, spreadsheetTitle = ''):
         columns -- list of column names [list, required]
         spreadsheetTitle -- filename of spreadsheet [string, optional: default is '']
 
-        Returns tuple: dictionary of type of replacement by columnName, dictionary of patterns by columnName (if any), dictionary of identifier formats by columnName (if any)
+        Returns tuple: dictionary of type of replacement by columnName, dictionary of patterns by columnName (if any), dictionary of identifier formats by columnName (if any), a dictionary of date boundaries by columnName (if any)
     '''
     patterns = {}
     idFormats = {}
+    bounds = {}
 
     if spreadsheetTitle != '':
         dialogTitle = "Column Selector: " + spreadsheetTitle
@@ -175,6 +177,7 @@ def getSpreadsheetInputFromUser(columns, spreadsheetTitle = ''):
                     ("wikitext", "Text (wikipedia)"),
                     ("job", "Occupation"),
                     ("addy", "Address"),
+                    ("date", "Date"),
                     ("id_num", "Identifier (numerical)")
                 ]
             ).run() 
@@ -190,39 +193,118 @@ def getSpreadsheetInputFromUser(columns, spreadsheetTitle = ''):
     if "quicktext" in columns.values() or "wikitext" in columns.values():
         for columnName, type in columns.items():
             if "text" in type:
-                patterns[columnName] = getPattern(columnName)
+                patterns[columnName] = getPattern(columnName, 'regex')
 
-    return (columns, patterns, idFormats)
+    if "date" in column.values():
+        for columnName, type in columns.items():
+            if "date" in type:   
+                patterns[columnName] = getPattern(columnName, 'date')
+                bounds[columnName] = getDateBoundariesInputFromUser(columnName)    
 
-def getPattern(columnName, retry = False):
-    ''' Query user for a regex pattern if they want to include a selection of the original content. 
+    return (columns, patterns, idFormats, bounds)
+
+def getPattern(columnName, type = 'regex', retry = False):
+    ''' Query user for a pattern if they want to include a selection of the original content. 
         Function is recursive if a pattern is entered which is not valid.
 
         Keyword arguments:
         columnName -- the name of the column being replaced [string, required]
+        type -- type of pattern  [string (regex|date), optional: default is 'regex']
         retry -- whether the function is being retried [boolean, optional: default is False]
 
-        Returns string: regex pattern
+        Returns string: pattern
     '''
     #print("Getting pattern")
 
-    if retry:
+    if retry and type == 'regex':
         titleText = 'Regex pattern for "' + displayHeading(columnName) + '" not valid. Re-enter pattern or leave blank'
+    elif retry:
+        titleText = 'Pattern for "' + displayHeading(columnName) + '" not valid. Re-enter pattern (see https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes) or leave blank for dd/mm/YYY format'
     else:
         titleText = 'Include pattern in text for "' + displayHeading(columnName) + '"'
+
+    if type == 'regex':
+        text = 'Enter regex pattern of text to include from original text or leave blank:'
+    elif type == 'date':
+        text = 'Enter date format pattern (as described in https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes) to include from original text or leave blank for dd/mm/YYY format'
+    else:
+        text = 'Enter text format pattern'
 
 
     pattern = input_dialog(
         title=titleText,
-        text='Enter regex pattern of text to include from original text or leave blank:').run()
+        text=text).run()
 
     if pattern != '': 
-        try:            
-            return re.compile(pattern)                         
-        except re.error:
-            return(getPattern(columnName, True))
+        try:
+            if type == 'regex':            
+                return re.compile(pattern)   
+            elif type == 'date':
+                date.today().strftime(pattern) 
+                return pattern                   
+        except:
+            return(getPattern(columnName, type, True))
+
     else:
         return pattern 
+
+def getDateBoundariesInputFromUser(columnName, retry = False, earliest_date = None):
+    ''' Query the user for the earliest and latest bounds to the date creation
+
+        Keyword arguments:
+        columnName -- the name of the column being replaced [string, required]
+        retry -- whether the function is being retried [boolean, optional: default is False]
+        earliest_date -- the earliest date boundary
+
+        Returns tuple: earliest date (Date), latest date (Date)
+    '''
+
+    if retry and earliest_date == None:
+        earliestTitleText = 'Earliest date for "' + displayHeading(columnName) + '" not valid. Re-enter date or leave blank.'
+    else:
+        earliestTitleText = 'Set earliest date in range for "' + displayHeading(columnName) + '"'
+
+    if earliest_date == None:
+        earliest = input_dialog(
+            title=earliestTitleText,
+            text='Enter the earliest date in the format YYYYmmdd (defaults to 18000101 if no date entered)').run()  
+
+        if earliest != None:
+            if len(earliest.strip()) == 8:
+                try: 
+                    earliest_date = date(int(earliest[:4]), int(earliest[4:6]), int(earliest[6:]))
+                except ValueError:
+                    return getDateBoundariesInputFromUser(columnName, True)
+            elif len(earliest.strip()) == 0:
+                earliest_date = date(1800,1,1)
+            else:
+                return getDateBoundariesInputFromUser(columnName, True)
+        else:
+            exit()
+
+    if retry and earliest_date != None:
+        latestTitleText = 'Latest date for "' + displayHeading(columnName) + '" not valid. Re-enter date or leave blank.'
+    else:
+        latestTitleText = 'Set latest date in range for "' + displayHeading(columnName) + '"'
+
+    latest = input_dialog(
+        title=latestTitleText,
+        text='Enter the latest date in the format YYYYmmdd (defaults to 19500101 if no date entered)').run() 
+
+    if latest != None:
+        if len(latest.strip()) == 8:
+            try: 
+                latest_date = date(int(latest[:4]), int(latest[4:6]), int(latest[6:]))
+            except ValueError:
+                return getDateBoundariesInputFromUser(columnName, True, earliest_date)
+        elif len(latest.strip()) == 0:
+            latest_date = date(1950, 1, 1)
+        else:
+            return getDateBoundariesInputFromUser(columnName, True, earliest_date)
+    else:
+        exit()
+
+    return (earliest_date, latest_date)
 
 def includeFromOriginalEntry(pattern, originalText, newText):
     ''' Get any text matching the given pattern from the original text and add it to the replacement text
@@ -236,7 +318,7 @@ def includeFromOriginalEntry(pattern, originalText, newText):
     '''
     return([newRow[:-len("[Replacement]")] + " ".join(pattern.findall(oldRow)) + " [Replacement]" if re.search(pattern, oldRow) else newRow for oldRow, newRow in zip(originalText, newText)])
 
-def createNewEntries(filename, sheet, columnsToRedact, patterns, identifierFormats):
+def createNewEntries(filename, sheet, columnsToRedact, patterns, identifierFormats, boundaries):
     ''' Generate the entries for the new spreadsheet
 
         Keyword arguments:
@@ -245,6 +327,7 @@ def createNewEntries(filename, sheet, columnsToRedact, patterns, identifierForma
         columnsToRedact -- list of columns to be redacted by column name [dictionary, required]
         patterns -- list of patterns for given columns by column name [dictionary, required]
         identifierFormat -- tuple with values for length and uniqueness for given spreadsheet [tuple, required]
+        boundaries -- list of tuples containing date boundaries by column name [dictionary, required]
 
         Returns dictionary: values for the new spreadsheet by columnNames
     '''
@@ -297,6 +380,10 @@ def createNewEntries(filename, sheet, columnsToRedact, patterns, identifierForma
                 replacementColumns[columnName] = newJobColumnGenerator(len(originalColumn))
             elif type == "id_num":
                 replacementColumns[columnName] = newIdentifierColumnGenerator(len(originalColumn), "numerical", identifierFormats[columnName])
+            elif type == "date":
+                earliest, latest = boundaries[columnName]
+                pattern = patterns[columnName]
+                replacementColumns[columnName] = newDateColumnGenerator(len(originalColumn), pattern, earliest, latest)
             elif type != "fullname":
                 raise ValueError("Column type " + type + " not recognised")
 
@@ -522,7 +609,22 @@ def generateNumber(length, consistent = True):
 
     return int(id_string)
 
-def outputNewSheet(file_path, sheet_name, new_workbook, replacements, patterns, idLengths):
+def newDateColumnGenerator(count = 1, pattern = "%d/%m/%Y", earliest = date(1800, 1, 1), latest = date(1950, 1, 1)):
+    ''' Generates fake dates within a given range and in a specific format 
+
+        Keyword arguments:
+        count -- how many dates should be generated [int, optional: default is 1]
+        earliest -- earliest date in date range [date, optional: default is 1/1/1800]
+        latest -- latest date in date range [date, optional: default is 1/1/1950]
+        pattern -- format of the date as described using the strftime format codes (https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes) [string, optional: default is %d/%m/%Y]
+
+        Returns list: generated dates      
+    '''
+    fake = Faker()
+
+    return [fake.date_between_dates(date_start=earliest, date_end=latest).strftime(pattern) for i in range(count)]
+
+def outputNewSheet(file_path, sheet_name, new_workbook, replacements, patterns, idLengths, boundaries):
     ''' Opens the original file to get the values, processes them to generate the values for a replacement spreadsheet and saves the new version
 
     Keyword arguments:
@@ -587,6 +689,7 @@ print(newIdentifiers)'''
     Generate new spreadsheet based on user replacement settings and output to specified folder
 '''
 
+''''''
 inputFolder, outputFolder = getPathsFromUser()
 
 if outputFolder != None:
@@ -605,7 +708,7 @@ if outputFolder != None:
     if bulk:
         # Getting replacement information by column names based on first sheet in first spreadsheet
         spreadsheetValues, mapping = s.getSpreadsheetValues(files[0])
-        userInput, patterns, idLengths = getSpreadsheetInputFromUser(list(mapping.keys()))
+        userInput, patterns, idLengths, boundaries = getSpreadsheetInputFromUser(list(mapping.keys()))
     else:
         # Getting replacement information by column name for each spreadsheet based on columns in first sheet in each spreadsheet
         for index, file in enumerate(files):         
@@ -633,7 +736,7 @@ if outputFolder != None:
             new_workbook = s.setupNewWorkbook(file)
             print("Processing File " + str(index + 1) + ": " + os.path.basename(file))
 
-            userInput, patterns, idLengths  = userInputBySheet[os.path.splitext(os.path.basename(file))[0]]
+            userInput, patterns, idLengths, boundaries  = userInputBySheet[os.path.splitext(os.path.basename(file))[0]]
 
             for sheet in s.getSheetListByFilename(file):
                 print("Processing sheet: " + sheet)
