@@ -8,6 +8,7 @@ from faker import Faker
  
 '''
 # To Do: Add date of birth, with boundary options
+# To Do: date upper bound cannot be before date lower bound
 # To Do: Make heading match non-case sensitive
 # TO Do: Selecting 'Cancel' at any point during user input should end program 
 # To Do: Allow option for alphabetic identifiers and alphanumeric identifiers 
